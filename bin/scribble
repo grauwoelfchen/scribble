@@ -1,0 +1,71 @@
+#!/usr/bin/env ruby
+# encoding: utf-8
+
+require 'pathname'
+require 'slop'
+
+root = Pathname.new(__FILE__).realpath.parent.parent
+$:.unshift root.join('lib') if $0 == __FILE__
+
+require 'scribble'
+
+class Slop
+  def desc desc=''
+    @desc = desc unless desc.empty?
+    @desc
+  end
+end
+
+opts = {}
+cmds = Slop::Commands.new help: true do
+  default do
+    help = <<-BANNER
+Usage: scribble {add|edit|init|list} [options]
+See `scribble <command> --help` for more information on a specific command.
+Global options
+    BANNER
+    banner help.chomp
+    desc 'Show version'
+    on :v, :version, desc do
+      puts "scribble " + root.join('VERSION').read
+    end
+    add_callback(:empty) do
+      ARGV.unshift :list
+    end
+  end
+  on :add do
+    banner 'Usage: scribble add [task] [options]'
+  end
+  on :edit do
+    banner 'Usage: scribble edit index [options]'
+  end
+  on :delete do
+    banner 'Usage: scribble delete index [options]'
+  end
+  on :init do
+    banner 'Usage: scribble init [options]'
+  end
+  on :list do
+    banner 'Usage: scribble list [options]'
+    desc 'Limits the number of tasks'
+    on :n=, :number=, desc, as: :integer do
+      opts[:number] = self[:number]
+    end
+    desc 'Display random list'
+    on :r, :random, desc, as: :boolean do
+      opts[:random] = self.random?
+    end
+  end
+end
+
+begin
+  cmds.parse! ARGV.dup
+  if cmd = cmds[(ARGV.first.to_sym)] and !cmd.help?
+    conf = {}
+    conf.merge!({ option: opts }) unless opts.empty?
+    Scribble::Cli.start ARGV, conf
+  end
+rescue Slop::MissingArgumentError
+  puts "Missing argument. see `scribble <command> --help`"
+  exit
+end
