@@ -166,7 +166,7 @@ module Scribble
         task, done, mark, date = entry_of(index)
         if task
           old = [task, done, mark, date].join(DELIMITER)
-          new = [task, done, (mark == :mark ? 1 : 0), date].join(DELIMITER)
+          new = [task, done, (name == :mark ? 1 : 0), date].join(DELIMITER)
           gsub_line(old, new, "[#{name}ed]")
         end
       }
