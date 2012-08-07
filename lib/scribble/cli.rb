@@ -10,25 +10,25 @@ require 'scribble/wheel'
 module Scribble
   class Cli < Thor
     include Thor::Actions
-    ENDLINE_MARK = '---'
-    DELIMITER = ';'
+    ENDLINE_MARK    = '---'
+    DELIMITER       = ';'
     REPOSITORY_FILE = '.scribble'
-    def initialize(args, opts, conf)
-      load_settings
-      @config = @settings.dup
-      @config.merge! conf
-      @option = @config[:option] || {}
-      super(args, opts, conf)
-    end
     def self.source_root
       Dir.pwd
     end
+    def initialize(args, opts, conf)
+      load_settings
+      @config = @settings.dup
+      @config.merge!(conf)
+      @option = @config[:option] || {}
+      super(args, opts, conf)
+    end
     desc 'add', ''
     method_options :task => :string
-    def add task=''
+    def add(task='')
       blackhole unless has_repository?
       task = task.dup
-      insert_into_file repository, thor_config do
+      insert_into_file(repository, thor_config) {
         begin
           while task = Readline.readline("New task <new task> or [exit,quit,q] ? ")
             exit if task =~ /^(exit|quit|q)$/
@@ -36,7 +36,7 @@ module Scribble
           end if task.empty?
           task.gsub!(/^['"]|['"]$/, '')
           valid_range = (@config[:min_width]...(@config[:max_width] + 1))
-          unless valid_range.include? task.length
+          unless valid_range.include?(task.length)
             state = task.length > @config[:max_width] ? 'long' : 'short'
             while force = Readline.readline("Too #{state}, force add [Y,n] ? ")
               case force
@@ -50,15 +50,15 @@ module Scribble
           puts
           exit
         end
-        task << "#{DELIMITER}#{Time.now}"
+        task = [task, 0, 0, Time.now].join(DELIMITER)
         task << "\n"
         task.force_encoding('ascii-8bit')
-      end
-      report task, "[created]"
+      }
+      report(task, "[created]")
     end
     desc 'edit', ''
     method_options :index => :string
-    def edit index=nil
+    def edit(index=nil)
       blackhole unless has_repository?
       tasks = read_file
       exit unless line = tasks[index]
@@ -82,18 +82,15 @@ module Scribble
       file = File.read path
       if new_task = file.split("\n").first
         if new_task.empty?
-          delete index
+          delete(index)
         else
-          gsub_file repository, task.force_encoding('ascii-8bit'), thor_config do |match|
-            new_task.force_encoding('ascii-8bit')
-          end
-          report new_task, "[updated]"
+          gsub_task(task, new_task, '[updated]')
         end
       end
     end
     desc 'delete', ''
     method_options :index => :string
-    def delete index=nil
+    def delete(index=nil)
       blackhole unless has_repository?
       tasks = read_file
       exit unless task = tasks.delete(index)
@@ -110,18 +107,16 @@ module Scribble
     desc 'init', ''
     def init
       if has_repository?
-        puts "#{REPOSITORY_FILE} already exists."
+        puts "#{repository} already exists."
       else
-        create_file repository, thor_config do |f|
-          settings_to_yaml
-        end
-        puts "#{REPOSITORY_FILE} is created."
+        create_file(repository, thor_config){ |f| settings_to_yaml }
+        puts "#{repository} is created."
       end
     end
     desc 'list', ''
     method_options :n => :integer
     method_options :r => :boolean
-    def list n=nil, r=false
+    def list(n=nil, r=false)
       blackhole unless has_repository?
       tasks = read_file
       return if tasks.empty?
@@ -131,20 +126,53 @@ module Scribble
       list = keys.map{ |key| { key => tasks[key] } }
       list_width = list.map do |task_hash|
         task_hash.values.first.width
-      end.max - Time.now.to_s.width - DELIMITER.width
+      end.max - Time.now.to_s.width - (2)- (DELIMITER.width * 3)
       width = list_width < @config[:max_width] ? list_width : @config[:max_width]
+      puts "## \033[0;32m#{tasks.length} tasks\033[0;37m"
+      #puts "\033[0;36m@@ #{tasks.length} tasks @@\033[0;37m"
       list.each do |task_hash|
         entry = task_hash.values.first.split DELIMITER
         task = entry[0]
-        if task.width > @config[:max_width]
+        if task.width > width
           mark = '...'
           last = @config[:max_width] - mark.width
           task = task.rtrim(last) + mark
         end
         diff = width - task.width
-        puts task_hash.keys.first + " " + task.rpad(diff) + " " + entry[1]
+        done = !entry[1].to_i.zero?
+        mark = !entry[2].to_i.zero?
+        date = entry[3]
+        output(mark, task_hash.keys.first, task.rpad(diff), done, date)
       end
     end
+    def self.define_completion_method(name)
+      desc(name, '')
+      define_method(name) { |index|
+        blackhole unless has_repository?
+        task, done, mark, date = entry_of(index)
+        if task
+          old = [task, done, mark, date].join(DELIMITER)
+          new = [task, (name == :done ? 1 : 0), mark, date].join(DELIMITER)
+          gsub_line(old, new, "[#{name}]")
+        end
+      }
+    end
+    define_completion_method :done
+    define_completion_method :undone
+    def self.define_marking_method(name)
+      desc(name, '')
+      define_method(name) { |index|
+        blackhole unless has_repository?
+        task, done, mark, date = entry_of(index)
+        if task
+          old = [task, done, mark, date].join(DELIMITER)
+          new = [task, done, (mark == :mark ? 1 : 0), date].join(DELIMITER)
+          gsub_line(old, new, "[#{name}ed]")
+        end
+      }
+    end
+    define_marking_method :mark
+    define_marking_method :unmark
     private
     def blackhole
       w = Wheel.new 0.03
@@ -212,7 +240,32 @@ module Scribble
       end
       tasks
     end
-    def report task, state=''
+    def entry_of(index)
+      entry = nil
+      tasks = read_file
+      if line = tasks[index]
+        entry = line.split DELIMITER
+      end
+      entry
+    end
+    def gsub_task(task, new_task, state='[updated]')
+      task.force_encoding('ascii-8bit')
+      new_task.force_encoding('ascii-8bit')
+      gsub_file(repository, task, thor_config) { |match|
+        new_task
+      }
+      report(new_task, state)
+    end
+    alias :gsub_line :gsub_task
+    def output(mark, index, task, done, created)
+      puts "%s %s %s %s" % [
+        done ? "\033[0;32m+\033[0;37m" : (mark ? "\033[0;31m-\033[0;37m" : ' '),
+        "\033[1;30m[#{index}]\033[0;37m",
+        done ? "\033[0;32m#{task}\033[0;37m" : (mark ? "\033[0;31m#{task}\033[0;37m" : "\033[0;37m#{task}\033[0;37m" ),
+        "\033[1;30m#{created}\033[0;37m"
+      ]
+    end
+    def report(task, state='')
       puts task.chomp.gsub(DELIMITER, ' ').force_encoding('utf-8') + " #{state}"
     end
   end

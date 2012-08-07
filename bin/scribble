@@ -20,7 +20,7 @@ opts = {}
 cmds = Slop::Commands.new help: true do
   default do
     help = <<-BANNER
-Usage: scribble {add|edit|init|list} [options]
+Usage: scribble {add|edit|delete|(un)done|(un)mark|init|list} [options]
 See `scribble <command> --help` for more information on a specific command.
 Global options
     BANNER
@@ -34,16 +34,28 @@ Global options
     end
   end
   on :add do
-    banner 'Usage: scribble add [task] [options]'
+    banner 'Usage: scribble add [task]'
   end
   on :edit do
-    banner 'Usage: scribble edit index [options]'
+    banner 'Usage: scribble edit <index>'
   end
   on :delete do
-    banner 'Usage: scribble delete index [options]'
+    banner 'Usage: scribble delete <index> [options]'
+  end
+  on :done do
+    banner 'Usage: scribble done <index>'
+  end
+  on :undone do
+    banner 'Usage: scribble undone <index>'
+  end
+  on :mark do
+    banner 'Usage: scribble mark <index>'
+  end
+  on :unmark do
+    banner 'Usage: scribble unmark <index>'
   end
   on :init do
-    banner 'Usage: scribble init [options]'
+    banner 'Usage: scribble init'
   end
   on :list do
     banner 'Usage: scribble list [options]'
