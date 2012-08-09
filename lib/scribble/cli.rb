@@ -7,8 +7,19 @@ require 'thor'
 require 'scribble/string'
 require 'scribble/wheel'
 
+class VendorThor < Thor
+  class << self
+    protected
+    def create_task(meth)
+      @usage = meth
+      @desc  = meth
+      @hide  = false
+      super
+    end
+  end
+end
 module Scribble
-  class Cli < Thor
+  class Cli < VendorThor
     include Thor::Actions
     ENDLINE_MARK    = '---'
     DELIMITER       = ';'
@@ -23,8 +34,11 @@ module Scribble
       @option = @config[:option] || {}
       super(args, opts, conf)
     end
-    desc 'add', ''
-    method_options :task => :string
+    # Create new task entry
+    #
+    # === Parameters
+    # task<string>: task
+    method_option :task => :string
     def add(task='')
       blackhole unless has_repository?
       task = task.dup
@@ -56,7 +70,10 @@ module Scribble
       }
       report(task, "[created]")
     end
-    desc 'edit', ''
+    # Edit a task
+    #
+    # === Parameters
+    # index<string>: index number
     method_options :index => :string
     def edit(index=nil)
       blackhole unless has_repository?
@@ -88,7 +105,10 @@ module Scribble
         end
       end
     end
-    desc 'delete', ''
+    # Delete a task
+    #
+    # === Parameters
+    # index<string>: index number
     method_options :index => :string
     def delete(index=nil)
       blackhole unless has_repository?
@@ -104,7 +124,7 @@ module Scribble
       FileUtils.cp path, repository
       report task, "[deleted]"
     end
-    desc 'init', ''
+    # Create repository file
     def init
       if has_repository?
         puts "#{repository} already exists."
@@ -113,7 +133,11 @@ module Scribble
         puts "#{repository} is created."
       end
     end
-    desc 'list', ''
+    # Output list of tasks
+    #
+    # === Parameters
+    # n<integer>: numbers
+    # r<boolean>: random output ?
     method_options :n => :integer
     method_options :r => :boolean
     def list(n=nil, r=false)
@@ -145,8 +169,8 @@ module Scribble
         output(mark, task_hash.keys.first, task.rpad(diff), done, date)
       end
     end
+    # Mark done/undone
     def self.define_completion_method(name)
-      desc(name, '')
       define_method(name) { |index|
         blackhole unless has_repository?
         task, done, mark, date = entry_of(index)
@@ -159,8 +183,8 @@ module Scribble
     end
     define_completion_method :done
     define_completion_method :undone
+    # Mark important/normal
     def self.define_marking_method(name)
-      desc(name, '')
       define_method(name) { |index|
         blackhole unless has_repository?
         task, done, mark, date = entry_of(index)
