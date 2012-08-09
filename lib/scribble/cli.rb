@@ -38,7 +38,7 @@ module Scribble
     #
     # === Parameters
     # task<string>: task
-    method_option :task => :string
+    method_options :task => :string
     def add(task='')
       blackhole unless has_repository?
       task = task.dup
@@ -136,9 +136,9 @@ module Scribble
     # Output list of tasks
     #
     # === Parameters
-    # n<integer>: numbers
+    # n<numeric>: numbers
     # r<boolean>: random output ?
-    method_options :n => :integer
+    method_options :n => :numeric
     method_options :r => :boolean
     def list(n=nil, r=false)
       blackhole unless has_repository?
@@ -152,7 +152,11 @@ module Scribble
         task_hash.values.first.width
       end.max - Time.now.to_s.width - (2)- (DELIMITER.width * 3)
       width = list_width < @config[:max_width] ? list_width : @config[:max_width]
-      puts "## \033[0;32m#{tasks.length} tasks\033[0;37m"
+      if has_number?
+        puts "## \033[0;32m#{number}/#{tasks.length} tasks\033[0;37m"
+      else
+        puts "## \033[0;32m#{tasks.length} tasks\033[0;37m"
+      end
       #puts "\033[0;36m@@ #{tasks.length} tasks @@\033[0;37m"
       list.each do |task_hash|
         entry = task_hash.values.first.split DELIMITER
@@ -167,6 +171,45 @@ module Scribble
         mark = !entry[2].to_i.zero?
         date = entry[3]
         output(mark, task_hash.keys.first, task.rpad(diff), done, date)
+      end
+    end
+    # Say task(s)
+    #
+    # === Parameters
+    # n<numeric>: numbers
+    # r<boolean>: random output ?
+    method_options :n => :numeric
+    method_options :r => :boolean
+    def say(n=nil, r=false)
+      blackhole unless has_repository?
+      list = list(n, r)
+      case
+      when !`which espeak 2>/dev/null`.empty?
+        list.each do |task_hash|
+          index = task_hash.keys.first
+          task  = task_hash.values.first.split(DELIMITER).first
+          unless task.ascii_only?
+            task = "skipped"
+          end
+          system <<CMD
+espeak --stdout 'number#{index}: #{task}' 2>/dev/null | aplay >/dev/null 2>&1
+CMD
+          sleep 0.3
+        end
+      when !`which mplayer 2>/dev/null`.empty?
+        list.each do |task_hash|
+          index = task_hash.keys.first
+          task  = task_hash.values.first.split(DELIMITER).first
+          unless task.ascii_only?
+            task = "skipped"
+          end
+          system <<CMD
+mplayer -really-quiet "http://translate.google.com/translate_tts?tl=en&q=number#{index}: #{task}"
+CMD
+          sleep 0.3
+        end
+      when !`which say 2>/dev/null`.empty?
+        # pending
       end
     end
     # Mark done/undone

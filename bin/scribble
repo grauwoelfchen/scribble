@@ -68,6 +68,17 @@ Global options
       opts[:random] = self.random?
     end
   end
+  on :say do
+    banner 'Usage: scribble say <index>'
+    desc 'Limits the number of tasks'
+    on :n=, :number=, desc, as: :integer do
+      opts[:number] = self[:number]
+    end
+    desc 'Speak randomly'
+    on :r, :random, desc, as: :boolean do
+      opts[:random] = self.random?
+    end
+  end
 end
 
 begin
