@@ -140,7 +140,7 @@ module Scribble
     # r<boolean>: random output ?
     method_options :n => :numeric
     method_options :r => :boolean
-    def list(n=nil, r=false)
+    def list(n=nil, r=false, &block)
       blackhole unless has_repository?
       tasks = read_file
       return if tasks.empty?
@@ -160,6 +160,7 @@ module Scribble
       #puts "\033[0;36m@@ #{tasks.length} tasks @@\033[0;37m"
       list.each do |task_hash|
         entry = task_hash.values.first.split DELIMITER
+        index = task_hash.keys.first
         task = entry[0]
         if task.width > width
           mark = '...'
@@ -170,7 +171,8 @@ module Scribble
         done = !entry[1].to_i.zero?
         mark = !entry[2].to_i.zero?
         date = entry[3]
-        output(mark, task_hash.keys.first, task.rpad(diff), done, date)
+        output(mark, index, task.rpad(diff), done, date)
+        block.call(index, task) if block_given?
       end
     end
     # Say task(s)
@@ -182,34 +184,24 @@ module Scribble
     method_options :r => :boolean
     def say(n=nil, r=false)
       blackhole unless has_repository?
-      list = list(n, r)
       case
-      when !`which espeak 2>/dev/null`.empty?
-        list.each do |task_hash|
-          index = task_hash.keys.first
-          task  = task_hash.values.first.split(DELIMITER).first
-          unless task.ascii_only?
-            task = "skipped"
-          end
-          system <<CMD
-espeak --stdout 'number#{index}: #{task}' 2>/dev/null | aplay >/dev/null 2>&1
-CMD
-          sleep 0.3
-        end
-      when !`which mplayer 2>/dev/null`.empty?
-        list.each do |task_hash|
-          index = task_hash.keys.first
-          task  = task_hash.values.first.split(DELIMITER).first
-          unless task.ascii_only?
-            task = "skipped"
-          end
-          system <<CMD
-mplayer -really-quiet "http://translate.google.com/translate_tts?tl=en&q=number#{index}: #{task}"
-CMD
-          sleep 0.3
-        end
-      when !`which say 2>/dev/null`.empty?
-        # pending
+      when !`which mplayer 2>/dev/null`.empty?; command = \
+        'mplayer -really-quiet "http://translate.google.com/translate_tts?tl=en&q=number%s: %s"'
+      when !`which espeak 2>/dev/null`.empty? && 
+           !`which aplay 2>/dev/null`.empty?;   command = \
+        'espeak --stdout "number%s: %s" 2>/dev/null | aplay >/dev/null 2>&1'
+      when !`which say 2>/dev/null`.empty?;     command = \
+        '' # pending
+      else command = nil
+      end
+      unless command
+        puts "mplayer, espeak or say command not found"
+        list(n, r)
+      else
+        list(n, r) { |index, task|
+          task = 'skipped' unless task.ascii_only?
+          system(command % [index, task])
+        }
       end
     end
     # Mark done/undone
