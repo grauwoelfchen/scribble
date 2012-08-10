@@ -191,7 +191,7 @@ module Scribble
            !`which aplay 2>/dev/null`.empty?;   command = \
         'espeak --stdout "number%s: %s" 2>/dev/null | aplay >/dev/null 2>&1'
       when !`which say 2>/dev/null`.empty?;     command = \
-        '' # pending
+        'say -v Alex "number%s: %s" >/dev/null 2>&1'
       else command = nil
       end
       unless command
