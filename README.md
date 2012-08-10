@@ -6,6 +6,13 @@ File based command line todo application.
 
 ```
 $ gem install scribble
+
+or
+
+$ git clone https://github.com/grauwoelfchen/scribble.git
+$ cd scribble
+$ rake build
+$ gem install pkg/scribble-x.x.x.gem
 ```
 
 ## Usage
@@ -51,15 +58,16 @@ $ bundle exec rspec -f documentation
 
 ```
 $ scribble list
-## 8 tasks
-+ [00] Colorize output                      2012-08-06 12:04:25 +0900
-- [01] Update test case :)                  2012-08-06 15:25:57 +0900
-+ [02] Create done action                   2012-08-06 20:16:25 +0900
-+ [03] Create marking (as important) action 2012-08-06 20:17:57 +0900
-- [04] Create clear method                  2012-08-08 00:55:20 +0900
-  [05] Refactor Cli class :(                2012-08-08 00:56:56 +0900
-  [06] Create action alias                  2012-08-08 00:57:29 +0900
-+ [07] Create say action                    2012-08-08 23:04:48 +0900
+## 9 tasks
++ [00] Colorize output                        2012-08-06 12:04:25 +0900
+- [01] Update test case :)                    2012-08-06 15:25:57 +0900
++ [02] Create done action                     2012-08-06 20:16:25 +0900
++ [03] Create marking (as important) action   2012-08-06 20:17:57 +0900
+- [04] Create clear method                    2012-08-08 00:55:20 +0900
+  [05] Refactor Cli class :(                  2012-08-08 00:56:56 +0900
+  [06] Create action alias                    2012-08-08 00:57:29 +0900
++ [07] Create say action                      2012-08-08 23:04:48 +0900
+  [08] Add undone only option for list action 2012-08-11 01:41:58 +0900
 ```
 
 ## Contributing
