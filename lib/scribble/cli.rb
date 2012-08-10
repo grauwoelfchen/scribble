@@ -7,7 +7,7 @@ require 'thor'
 require 'scribble/string'
 require 'scribble/wheel'
 
-class VendorThor < Thor
+class MyThor < Thor
   class << self
     protected
     def create_task(meth)
@@ -18,8 +18,15 @@ class VendorThor < Thor
     end
   end
 end
+
+class Array
+  def to_entry
+    self.join(Scribble::Cli::DELIMITER)
+  end
+end
+
 module Scribble
-  class Cli < VendorThor
+  class Cli < MyThor
     include Thor::Actions
     ENDLINE_MARK    = '---'
     DELIMITER       = ';'
@@ -41,7 +48,13 @@ module Scribble
     method_options :task => :string
     def add(task='')
       blackhole unless has_repository?
+      tasks = read_file
+      if tasks.length > 99
+        puts "Too many tasks :("
+        exit
+      end
       task = task.dup
+      date = Time.now
       insert_into_file(repository, thor_config) {
         begin
           while task = Readline.readline("New task <new task> or [exit,quit,q] ? ")
@@ -49,7 +62,7 @@ module Scribble
             break unless task.empty?
           end if task.empty?
           task.gsub!(/^['"]|['"]$/, '')
-          valid_range = (@config[:min_width]...(@config[:max_width] + 1))
+          valid_range = (@config[:min_width]..@config[:max_width])
           unless valid_range.include?(task.length)
             state = task.length > @config[:max_width] ? 'long' : 'short'
             while force = Readline.readline("Too #{state}, force add [Y,n] ? ")
@@ -64,11 +77,11 @@ module Scribble
           puts
           exit
         end
-        task = [task, 0, 0, Time.now].join(DELIMITER)
-        task << "\n"
-        task.force_encoding('ascii-8bit')
+        task_line = [task, 0, 0, date].to_entry
+        task_line << "\n"
+        task_line.force_encoding('ascii-8bit')
       }
-      report(task, "[created]")
+      report("#{task} #{date}", 'created')
     end
     # Edit a task
     #
@@ -77,12 +90,9 @@ module Scribble
     method_options :index => :string
     def edit(index=nil)
       blackhole unless has_repository?
-      tasks = read_file
-      exit unless line = tasks[index]
-      entry = line.split DELIMITER
-      task = entry.first
-      date = entry.last
-      path = Tempfile.open 'scribble' do |tf|
+      task, done, mark, date = entry_of(index)
+      exit unless task
+      path = Tempfile.open('scribble') do |tf|
         tf.puts task
         tf.puts
         tf.puts <<-NOTE
@@ -96,12 +106,12 @@ module Scribble
         tf.path
       end
       system("#{editor} #{path}")
-      file = File.read path
+      file = File.read(path)
       if new_task = file.split("\n").first
         if new_task.empty?
           delete(index)
         else
-          gsub_task(task, new_task, '[updated]')
+          gsub_task(task, new_task, 'updated')
         end
       end
     end
@@ -114,15 +124,15 @@ module Scribble
       blackhole unless has_repository?
       tasks = read_file
       exit unless task = tasks.delete(index)
-      path = Tempfile.open 'scribble' do |tf|
+      path = Tempfile.open('scribble') do |tf|
         tasks.keys.sort.each do |key|
           tf.puts tasks[key]
         end
         tf.puts settings_to_yaml
         tf.path
       end
-      FileUtils.cp path, repository
-      report task, "[deleted]"
+      FileUtils.cp(path, repository)
+      report(task, 'deleted')
     end
     # Create repository file
     def init
@@ -146,11 +156,11 @@ module Scribble
       return if tasks.empty?
       keys = tasks.keys.sort
       keys.shuffle! if random?
-      keys = keys[0...number]if has_number?
+      keys = keys[0...number] if has_number?
       list = keys.map{ |key| { key => tasks[key] } }
       list_width = list.map do |task_hash|
         task_hash.values.first.width
-      end.max - Time.now.to_s.width - (2)- (DELIMITER.width * 3)
+      end.max - Time.now.to_s.width - 2 - (DELIMITER.width * 3)
       width = list_width < @config[:max_width] ? list_width : @config[:max_width]
       if has_number?
         puts "## \033[0;32m#{number}/#{tasks.length} tasks\033[0;37m"
@@ -159,18 +169,15 @@ module Scribble
       end
       #puts "\033[0;36m@@ #{tasks.length} tasks @@\033[0;37m"
       list.each do |task_hash|
-        entry = task_hash.values.first.split DELIMITER
         index = task_hash.keys.first
-        task = entry[0]
+        task, done, mark, date = entry_of(index)
         if task.width > width
-          mark = '...'
-          last = @config[:max_width] - mark.width
-          task = task.rtrim(last) + mark
+          last = '...'
+          task = task.rtrim(@config[:max_width] - last.width) + last
         end
         diff = width - task.width
-        done = !entry[1].to_i.zero?
-        mark = !entry[2].to_i.zero?
-        date = entry[3]
+        done = !done.to_i.zero?
+        mark = !mark.to_i.zero?
         output(mark, index, task.rpad(diff), done, date)
         block.call(index, task) if block_given?
       end
@@ -204,40 +211,29 @@ module Scribble
         }
       end
     end
-    # Mark done/undone
-    def self.define_completion_method(name)
-      define_method(name) { |index|
+    # done/undone, mark/unmark
+    def self.define_update_method_for(name)
+      define_method(name) { |index=nil|
         blackhole unless has_repository?
         task, done, mark, date = entry_of(index)
         if task
-          old = [task, done, mark, date].join(DELIMITER)
-          new = [task, (name == :done ? 1 : 0), mark, date].join(DELIMITER)
-          gsub_line(old, new, "[#{name}]")
+          old = [task, done, mark, date].to_entry
+          case name
+          when :done, :undone; done = (name == :done ? 1 : 0)
+          when :mark, :unmark; mark = (name == :mark ? 1 : 0)
+          end
+          new = [task, done, mark, date].to_entry
+          gsub_line(old, new, [:mark, :unmark].include?(name) ? "#{name}ed" : name)
         end
       }
     end
-    define_completion_method :done
-    define_completion_method :undone
-    # Mark important/normal
-    def self.define_marking_method(name)
-      define_method(name) { |index|
-        blackhole unless has_repository?
-        task, done, mark, date = entry_of(index)
-        if task
-          old = [task, done, mark, date].join(DELIMITER)
-          new = [task, done, (name == :mark ? 1 : 0), date].join(DELIMITER)
-          gsub_line(old, new, "[#{name}ed]")
-        end
-      }
-    end
-    define_marking_method :mark
-    define_marking_method :unmark
+    %w(done undone mark unmark).each { |action|
+      define_update_method_for(action.intern)
+    }
     private
     def blackhole
-      w = Wheel.new 0.03
-      20.times do
-        w.backward
-      end
+      w = Wheel.new(0.03)
+      20.times{ w.backward }
       puts "Please run `scribble init`"
       exit
     end
@@ -247,13 +243,13 @@ module Scribble
     def load_settings
       @settings = {}
       if has_repository?
-        File.open repository do |f|
-          YAML.load_documents f do |y|
+        File.open(repository) do |f|
+          YAML.load_documents(f) do |y|
             @settings = y if y.is_a? Hash
           end
         end
       end
-      @settings[:option] ||= { number: nil, random: false }
+      @settings[:option]    ||= { number: nil, random: false }
       @settings[:max_width] ||= 51
       @settings[:min_width] ||= 3
     end
@@ -281,23 +277,24 @@ module Scribble
       @repository ||= File.join Scribble::Cli.source_root, REPOSITORY_FILE
     end
     def has_repository?
-      File.exist? repository
+      File.exist?(repository)
     end
     def read_file
-      tasks = {}
+      return @_tasks if @_tasks
+      @_tasks = {}
       i = 0
-      w = Wheel.new 0.03 # relax :)
-      File.open repository do |t|
+      w = Wheel.new(0.03) # relax :)
+      File.open(repository) do |t|
         while line = t.gets.chomp
           w.forward
           break if line == ENDLINE_MARK
           next if line[0] == '#'
           head = i < 10 ? "0" + i.to_s : i.to_s
-          tasks[head] = line.chomp
+          @_tasks[head] = line.chomp
           i += 1
         end
       end
-      tasks
+      @_tasks
     end
     def entry_of(index)
       entry = nil
@@ -307,7 +304,7 @@ module Scribble
       end
       entry
     end
-    def gsub_task(task, new_task, state='[updated]')
+    def gsub_task(task, new_task, state='updated')
       task.force_encoding('ascii-8bit')
       new_task.force_encoding('ascii-8bit')
       gsub_file(repository, task, thor_config) { |match|
@@ -325,7 +322,7 @@ module Scribble
       ]
     end
     def report(task, state='')
-      puts task.chomp.gsub(DELIMITER, ' ').force_encoding('utf-8') + " #{state}"
+      puts task.chomp.gsub(DELIMITER, ' ').force_encoding('utf-8') + " [#{state}]"
     end
   end
 end
