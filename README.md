@@ -10,6 +10,8 @@ $ gem install scribble
 
 ## Usage
 
+![http://farm9.staticflickr.com/8300/7750573776_9184dee824.jpg](http://farm9.staticflickr.com/8300/7750573776_9184dee824.jpg)
+
 see --help
 
 ```
