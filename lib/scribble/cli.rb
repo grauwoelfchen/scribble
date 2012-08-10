@@ -192,13 +192,13 @@ module Scribble
     def say(n=nil, r=false)
       blackhole unless has_repository?
       case
-      when !`which mplayer 2>/dev/null`.empty?; command = \
-        'mplayer -really-quiet "http://translate.google.com/translate_tts?tl=en&q=number%s: %s"'
       when !`which espeak 2>/dev/null`.empty? && 
            !`which aplay 2>/dev/null`.empty?;   command = \
-        'espeak --stdout "number%s: %s" 2>/dev/null | aplay >/dev/null 2>&1'
+        'espeak --stdout "%s" 2>/dev/null | aplay >/dev/null 2>&1'
       when !`which say 2>/dev/null`.empty?;     command = \
-        'say -v Alex "number%s: %s" >/dev/null 2>&1'
+        'say -v Alex "%s" >/dev/null 2>&1'
+      when !`which mplayer 2>/dev/null`.empty?; command = \
+        'mplayer -really-quiet "http://translate.google.com/translate_tts?tl=en&q=%s"'
       else command = nil
       end
       unless command
@@ -207,8 +207,11 @@ module Scribble
       else
         list(n, r) { |index, task|
           task = 'skipped' unless task.ascii_only?
-          system(command % [index, task])
+          system(command % "number#{index}: #{task}")
         }
+        if (Time.new.sec % 10).zero?
+          system(command % "You can do it !")
+        end
       end
     end
     # done/undone, mark/unmark
